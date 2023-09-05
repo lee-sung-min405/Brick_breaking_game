@@ -1,0 +1,648 @@
+#include <GL/glut.h>
+#include <cmath>
+#include <vector>
+#include <iostream>
+#include <string>
+using namespace std;
+#define PI 3.14159265358979323846
+// 선의 크기를 현재 크기의 절반으로 줄이는 변수
+double lineScale = 0.5;
+bool Line_button = true;
+
+class Ball {
+public:
+	double x, y;
+	double radius;
+	double speed = 2.0;
+	double direction;
+
+	Ball(double x, double y, double radius, double speed, double direction) :
+		x(x), y(y), radius(radius), speed(speed), direction(direction) {}
+
+	// 공 그리기
+	void draw() {
+		glBegin(GL_POLYGON);
+		glColor3f(1.0f, 1.0f, 1.0f);
+		for (int i = 0; i < 360; i += 10) {
+			double angle = i * PI / 180;
+			double xp = x + radius * cos(angle);
+			double yp = y + radius * sin(angle);
+			glVertex2f(xp, yp);
+		}
+		glEnd();
+	}
+	void move() {
+		double rad = direction * 3.141592 / 180.0;
+		x += speed * cos(rad);
+		y += speed * sin(rad);
+
+	}
+
+};
+
+/////////////////////////////////////////////////////////////
+class Item {
+public:
+	double x, y;
+	double width, height;
+	int type;
+
+	Item(double x, double y, double width, double height, int type) : x(x), y(y), width(width), height(height), type(type) {}
+	void draw() {
+		glBegin(GL_POLYGON);
+		glColor3f(1.0f, 1.0f, 0.0f);
+		glVertex2f(x - width / 2, y - height / 2);
+		glVertex2f(x + width / 2, y - height / 2);
+		glVertex2f(x + width / 2, y + height / 2);
+		glVertex2f(x - width / 2, y + height / 2);
+		glEnd();
+	}
+};
+
+class Brick {
+public:
+	double x, y;
+	double width, height;
+	Brick(double x, double y, double width, double height) :
+		x(x), y(y), width(width), height(height) {}
+	void draw() {
+		glBegin(GL_POLYGON);
+		glColor3f(0.5f, 0.5f, 0.5f);
+		glVertex2f(x - width / 2, y - height / 2);
+		glVertex2f(x + width / 2, y - height / 2);
+		glVertex2f(x + width / 2, y + height / 2);
+		glVertex2f(x - width / 2, y + height / 2);
+		glEnd();
+	}
+};
+
+class Paddle {
+public:
+	double x, y;
+	double width, height;
+	Paddle(double x, double y, double width, double height) :
+		x(x), y(y), width(width), height(height) {}
+	void draw() {
+		glBegin(GL_POLYGON);
+		glColor3f(1.0f, 1.0f, 1.0f);
+		glVertex2f(x - width / 2, y - height / 2);
+		glVertex2f(x + width / 2, y - height / 2);
+		glVertex2f(x + width / 2, y + height / 2);
+		glVertex2f(x - width / 2, y + height / 2);
+		glEnd();
+	}
+};
+
+
+//////////////////////////////////////////////////////////
+vector<Item> items;
+vector<Brick> bricks;
+int brick_rows = 5;
+int brick_cols = 10;
+double brick_width = 60;
+double brick_height = 20;
+double brick_spacing = 10;
+double brick_start_x = -300 + (brick_width + brick_spacing) / 2;
+double brick_start_y = 200;
+
+Ball ball(0, -180, 10, 5, 60);
+Paddle paddle(0, -200, 100, 20);
+GLfloat rect_x = 0.0f; // 사각형의 x좌표
+GLfloat rect_y = 0.0f; // 사각형의 y좌표
+
+int level = 1;
+int gameState = 0;
+int score = 0;
+
+// 원의 중심 좌표와 반지름
+double centerX = 0.0;
+double centerY = 0.0;
+double radius = 500.0;
+
+// 공의 중심 좌표와 반지름
+double ballX = 0.0;
+double ballY = -20.0; // 공이 원의 맨 위에 위치하도록 초기화
+
+/////////////////////레벨 업 관련 함수/////////////////////////
+void levelUp() {
+	level++;
+	brick_rows++;
+	brick_cols++;
+	ball.speed += 1;
+	bricks.clear();
+	for (int i = 0; i < brick_rows; i++) {
+		for (int j = 0; j < brick_cols; j++) {
+			double x = brick_start_x + j * (brick_width + brick_spacing);
+			double y = brick_start_y - i * (brick_height + brick_spacing);
+			Brick brick(x, y, brick_width, brick_height);
+			bricks.push_back(brick);
+		}
+	}
+}
+
+void printLevel() {
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT), 0, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glColor3f(1.0f, 1.0f, 1.0f);
+	if (gameState == 1) {
+		glRasterPos2f(10, 50);
+		string score_str = "Score: " + to_string(score);
+		for (char c : score_str) {
+			glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+		}
+	}
+	glRasterPos2f(10, 20);
+	string level_str = "Level: " + to_string(level);
+	for (char c : level_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+}
+
+/////////////////////게임 종료 화면 ///////////////////////
+void drawGameOver() {
+	gameState = 2;
+	glClear(GL_COLOR_BUFFER_BIT);
+	glColor3f(1.0f, 1.0f, 1.0f);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT), 0, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glColor3f(1.0f, 1.0f, 1.0f);
+	glRasterPos2f(340, 300);
+	string gameover_str = "GAME OVER";
+	for (char c : gameover_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(340, 350);
+	string level_str = "Level: " + to_string(level);
+	for (char c : level_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(340, 400);
+	string Score_str = "Score : " + to_string(score);
+	for (char c : Score_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+}
+
+
+/////////////////////게임 클리어 화면 ///////////////////////
+void drawGameClear() {
+	gameState = 3;
+	glClear(GL_COLOR_BUFFER_BIT);
+	glColor3f(1.0f, 1.0f, 1.0f);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0, glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT), 0, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glColor3f(1.0f, 1.0f, 1.0f);
+	glRasterPos2f(340, 300);
+	string gameover_str = "GAME CLEAR";
+	for (char c : gameover_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(340, 350);
+	string level_str = "Level: " + to_string(level);
+	for (char c : level_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(340, 400);
+	string Score_str = "Score : " + to_string(score);
+	for (char c : Score_str) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+}
+//////////////////////////게임 인트로 화면/////////////////////////////
+void drawIntro() {
+	glClear(GL_COLOR_BUFFER_BIT);
+	glColor3f(1.0f, 1.0f, 1.0f);
+	// 제목 그리기
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(-400, 400, -400, 400, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glRasterPos2f(-120, 250);
+	string title_str = "BRICK BREAKER GAME";
+	for (char c : title_str) {
+		glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, c);
+	}
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+
+	// 규칙 문구 그리기
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(-400, 400, -400, 400, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glRasterPos2f(-190, 100);
+	string rule_str1 = "        Press the 'space bar' to start the game.";
+	string rule_str2 = "          Press 'q' to exit the game.";
+	for (char c : rule_str1) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(-150, 70);
+	for (char c : rule_str2) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+
+	// 게임 설명 그리기
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(-400, 400, -400, 400, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	glRasterPos2f(-190, -200);
+	string desc_str1 = "Direction key: left[A], right[D]";
+	string desc_str2 = "Game difficulty increase key: [P]";
+	string desc_str3 = "Item : Eating a yellow box increases the size of the ball,";
+	string desc_str4 = "decreases the speed of the ball, or increases the size of the pedal.";
+	for (char c : desc_str1) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(-190, -230);
+	for (char c : desc_str2) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(-190, -260);
+	for (char c : desc_str3) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glRasterPos2f(-190, -290);
+	for (char c : desc_str4) {
+		glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, c);
+	}
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+
+	glutSwapBuffers();
+}
+
+/////////////////////사각형을 그리는 함수/////////////////////////
+void drawRectangle() {
+	glBegin(GL_QUADS); // 사각형 시작
+	rect_x = (GLfloat)(rand() % 800 - 400); // x좌표 범위: -400 ~ 400
+	rect_y = (GLfloat)(rand() % 600 - 300); // y좌표 범위: -300 ~ 300
+	glColor3f(0.0f, 0.0f, 1.0f); // 파란색으로 색상 설정
+	glVertex2f(rect_x - 50.0f, rect_y - 50.0f); // 왼쪽 아래 꼭지점
+	glVertex2f(rect_x - 50.0f, rect_y + 50.0f); // 왼쪽 위 꼭지점
+	glVertex2f(rect_x + 50.0f, rect_y + 50.0f); // 오른쪽 위 꼭지점
+	glVertex2f(rect_x + 50.0f, rect_y - 50.0f); // 오른쪽 아래 꼭지점
+	glEnd(); // 사각형 종료
+}
+
+
+///////////////////////게임 플레이 화면//////////////////////////
+void drawGame() {
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	//배경 원 그리기
+	glColor3ub(138, 43, 226);
+	glBegin(GL_TRIANGLE_FAN);
+	for (int i = 0; i < 360; i++) {
+		double angle = i * PI / 180;
+		double x = centerX + radius * cos(angle);
+		double y = centerY + radius * sin(angle);
+		glVertex2d(x, y);
+	}
+
+	// Draw items
+	for (int i = 0; i < items.size(); i++) {
+		items[i].draw();
+	}
+
+	for (Brick brick : bricks) {
+		brick.draw();
+	}
+
+	if (level >= 3) {
+		for (int i = 0; i < score / 2; i++) { //안개 그리기
+			drawRectangle();
+		}
+	}
+	ball.draw();
+	ball.move();
+
+	// 공과 벽돌 충돌 검사
+	for (int i = 0; i < bricks.size(); i++) {
+		Brick& brick = bricks[i];
+		if (ball.x + ball.radius > brick.x - brick.width / 2 &&
+			ball.x - ball.radius < brick.x + brick.width / 2 &&
+			ball.y + ball.radius > brick.y - brick.height / 2 &&
+			ball.y - ball.radius < brick.y + brick.height / 2) {
+			score++;
+			// 벽돌이 부서지도록 처리
+			bricks.erase(bricks.begin() + i);
+
+			// 공과 벽돌 충돌 시 방향 변경
+			bool collisionX = ball.x + ball.radius < brick.x - brick.width / 2 || ball.x - ball.radius > brick.x + brick.width / 2;
+			bool collisionY = ball.y + ball.radius < brick.y - brick.height / 2 || ball.y - ball.radius > brick.y + brick.height / 2;
+
+			if (collisionX) {
+				ball.direction = -ball.direction;
+			}
+			if (collisionY) {
+				ball.direction = 180 - ball.direction;
+			}
+
+			break;
+		}
+	}
+
+	//아이템 충돌 효과 검사
+	for (int i = 0; i < items.size(); i++) {
+		double dx = items[i].x - ball.x;
+		double dy = items[i].y - ball.y;
+		double distance = sqrt(dx * dx + dy * dy);
+		if (distance < ball.radius + (items[i].width + items[i].height) / 2) {
+
+			// 아이템과 충돌한 경우
+			items.erase(items.begin() + i);
+			i--;
+			// 아이템에 따른 효과 추가
+			if (items[i].type == 0) {
+				ball.radius += 5; //공의 크기 증가
+			}
+			else if (items[i].type == 1) {
+				ball.speed -= 1; // 공의 속도 감소
+			}
+			else if (items[i].type == 2) {
+				paddle.width += 20; //패달의 크기 증가
+			}
+			else {
+
+			}
+		}
+	}
+	
+	printLevel(); // 현재 레벨 출력
+
+	////////////////////////////기울어진 벽//////////////////////////
+	if (Line_button == false && level>=2 && score % 2 !=0) {
+		// 화면 왼쪽 모서리에 45도로 기울어진 선 그리기
+		glLineWidth(2.0f);
+		glBegin(GL_LINES);
+		glColor3f(1.0f, 0.0f, 0.0f);
+		glVertex2f(-400.0f, -400.0f);
+		glVertex2f(400.0f, 400.0f);
+		glEnd();
+
+		// 공과 선 충돌 검사
+		double slope = 1.0;     // 선의 기울기
+		double intercept = 0.0; // 선의 y 절편
+
+		// 선과 공의 거리 계산
+		double distance = abs((ball.y - slope * ball.x - intercept) / sqrt(slope * slope + 1));
+
+		if (distance <= ball.radius) {
+			// 공과 선이 충돌한 경우
+			double reflectionAngle = atan(slope) * 180.0 / PI;  // 선의 기울기에 대한 반사각 계산
+			double incidentAngle = ball.direction - reflectionAngle;  // 공의 입사각 계산
+			double newDirection = reflectionAngle - incidentAngle;  // 반사각과 입사각을 이용하여 새로운 방향 계산
+			ball.direction = fmod(360.0 + newDirection, 360.0);  // 방향을 0~360 범위로 조정
+		}
+	}
+
+	else if (Line_button == false &&  level >= 2 && score % 2 == 0) {
+		// 화면 오른쪽 모서리에 오른쪽으로 45도로 기울어진 선 그리기
+		glLineWidth(2.0f);
+		glBegin(GL_LINES);
+		glColor3f(1.0f, 0.0f, 0.0f);
+		glVertex2f(400.0f, -400.0f);
+		glVertex2f(-400.0f, 400.0f);
+		glEnd();
+
+		// 공과 선 충돌 검사
+		double slope = -1.0;      // 선의 기울기
+		double intercept = 0.0;   // 선의 y 절편
+
+		// 선과 공의 거리 계산
+		double distance = abs((ball.y - slope * ball.x - intercept) / sqrt(slope * slope + 1));
+
+		if (distance <= ball.radius) {
+			// 공과 선이 충돌한 경우
+			double reflectionAngle = atan(slope) * 180.0 / PI;  // 선의 기울기에 대한 반사각 계산
+			double incidentAngle = ball.direction - reflectionAngle;  // 공의 입사각 계산
+			double newDirection = reflectionAngle - incidentAngle;  // 반사각과 입사각을 이용하여 새로운 방향 계산
+			ball.direction = fmod(360.0 + newDirection, 360.0);  // 방향을 0~360 범위로 조정
+		}
+
+	}
+	/////////////////////////////////////////////////////////////////
+	paddle.draw();
+	double paddleTop = paddle.y + paddle.height / 2;
+	double paddleBottom = paddle.y - paddle.height / 2;
+	double paddleLeft = paddle.x - paddle.width / 2;
+	double paddleRight = paddle.x + paddle.width / 2;
+
+	if (ball.y - ball.radius < paddleTop &&
+		ball.y + ball.radius > paddleBottom &&
+		ball.x + ball.radius > paddleLeft &&
+		ball.x - ball.radius < paddleRight) {
+		ball.direction = 360 - ball.direction;
+	}
+
+
+	// 화면의 왼쪽 벽면을 기준으로 충돌 검사
+	if (ball.x < -400 + ball.radius) {
+		ball.direction = 180 - ball.direction;
+	}
+
+	// 화면의 오른쪽 벽면을 기준으로 충돌 검사
+	if (ball.x > 400 - ball.radius) {
+		ball.direction = 180 - ball.direction;
+	}
+
+	// 화면의 위쪽 벽면을 기준으로 충돌 검사
+	if (ball.y > 300 - ball.radius) {
+		ball.direction = -ball.direction;
+	}
+
+	// 화면의 아래쪽 벽면을 기준으로 충돌 검사
+	if (ball.y < -300 + ball.radius) {
+		// 게임 오버 화면을 띄워야 한다.
+		drawGameOver();
+	}
+	//아래의 조건으로 게임 클리어시 클리어 화면으로 넘어간다.
+	//게임 클리어 조건 10레벨 도달하면서 점수가 200점보다 커야한다.
+	if (level >= 5 && score > 100) {
+		drawGameClear();
+	}
+
+	glFlush();
+	glutSwapBuffers();
+}
+
+///////////////////////////////////////////////////////////////
+void display() {
+	if (gameState == 0) {
+		drawIntro();
+	}
+	else if (gameState == 1) {
+		drawGame();
+	}
+	else if (gameState == 2) {
+		drawGameOver();
+	}
+	else if (gameState == 3) {
+		drawGameClear();
+	}
+}
+
+void keyboard(unsigned char key, int x, int y) {
+	switch (key) {
+	case 'a':
+		paddle.x -= 10;
+		break;
+	case 'd':
+		paddle.x += 10;
+		break;
+	case 'q': // q를 누르면 게임을 종료합니다.
+		exit(0);
+		break;
+	case 'p': // p를 누르면 레벨 업합니다.
+		if (gameState == 1) {
+			levelUp();
+			break;
+		}
+		break;
+	case ' ': // 스페이스바를 누르면 게임이 시작 됩니다.
+		gameState = 1;
+	case 'b':
+		if (Line_button == true) {
+			Line_button = false;
+		}
+		else if (Line_button == false) {
+			Line_button = true;
+		}
+		
+
+		break;
+	}
+}
+
+void timer(int value) {
+	// 공의 새로운 좌표 계산
+	double newX = ball.x;
+	double newY = ball.y - ball.speed; // 아래로 이동하도록 수정
+	double distance = sqrt(pow(newX - centerX, 2) + pow(newY - centerY, 2));
+
+
+	// 원의 범위 안에 공이 있는 경우
+	if (distance < radius - ball.radius) {
+		ballX = newX;
+		ballY = newY;
+		if (ball.y < ((-300) - (ball.radius))) {//게임 오버 화면을 띄워야한다.
+			drawGameOver();
+		}
+	}
+	// 범위를 벗어난 경우
+	else { //이 녀석을 바꿔 주어야한다
+		// 충돌 시 공의 방향을 반대로 변경
+		ball.direction = 180 + ball.direction;
+		double rad = ball.direction * PI / 180;
+		ball.x += ball.speed * cos(rad);
+		ball.y += ball.speed * sin(rad);
+		if (ball.y < ((-300) - (ball.radius))) {//게임 오버 화면을 띄워야한다.
+			drawGameOver();
+		}
+	}
+
+	// 반지름이 250보다 작거나 같은 경우 반지름 증가
+	if (radius <= 320) {
+		radius = 500.0;
+	}
+	// 반지름이 250보다 크면서 100보다 큰 경우 반지름 감소
+	else if (radius <= 500 && radius > 320) {
+		radius = radius - 0.1;
+	}
+	glutPostRedisplay();
+	glutTimerFunc(16, timer, 0); // 60fps로 설정
+}
+
+int main(int argc, char** argv) {
+	int item_num = 0;
+	// 벡터 bricks에 벽돌 추가
+	for (int i = 0; i < brick_rows; i++) {
+		for (int j = 0; j < brick_cols; j++) {
+			double x = brick_start_x + j * (brick_width + brick_spacing);
+			double y = brick_start_y - i * (brick_height + brick_spacing);
+			Brick brick(x, y, brick_width, brick_height);
+			bricks.push_back(brick);
+		}
+	}
+	//아이템 생성
+	for (int i = 0; i < 10; i++) {
+		if (i == 0) {
+			double x = 900;
+			double y = 900;
+			Item item(x, y, 0, 0, rand() % 3);
+			items.emplace_back(x, y, 0, 0, rand() % 3);
+
+		}
+		else {
+			double x = rand() % 600 - 300;
+			double y = rand() % 400 - 200;
+			Item item(x, y, 20, 20, rand() % 3);
+			items.emplace_back(x, y, 20, 20, rand() % 3);
+
+		}
+	}
+
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+	glutInitWindowSize(800, 600);
+	glutInitWindowPosition(100, 100);
+	glutCreateWindow("Brick Breaker GAME [20193127_이성민]");
+	glClearColor(0.0, 0.0, 0.0, 1.0); // 배경색을 검은색으로 초기화
+	glMatrixMode(GL_PROJECTION); // 투영 행렬 모드 설정
+	glLoadIdentity(); // 투영 행렬 초기화
+	glOrtho(-400, 400, -300, 300, -1, 1); // 2D 오소(ortho) 투영 설정
+	glMatrixMode(GL_MODELVIEW);
+	glutDisplayFunc(display);
+	glutKeyboardFunc(keyboard);
+	glutTimerFunc(0, timer, 0);
+	glutMainLoop();
+	return 0;
+}
+ 
